@@ -100,3 +100,7 @@ export async function POST(request: Request) {
     { status: 200 },
   );
 }
+
+export async function GET(request: Request) {
+  return POST(request);
+}

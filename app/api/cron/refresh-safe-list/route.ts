@@ -20,3 +20,7 @@ export async function POST(request: Request) {
   const result = await refreshSafeList();
   return NextResponse.json({ ok: true, ...result });
 }
+
+export async function GET(request: Request) {
+  return POST(request);
+}
