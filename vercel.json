@@ -1,0 +1,12 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/watchlist-check",
+      "schedule": "0 * * * *"
+    },
+    {
+      "path": "/api/cron/refresh-safe-list",
+      "schedule": "0 */6 * * *"
+    }
+  ]
+}
