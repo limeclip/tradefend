@@ -32,7 +32,7 @@ export default function UpdatePasswordPage() {
 
   if (success) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-zinc-50 p-4">
+      <div className="min-h-screen flex items-center justify-center bg-sidebar p-4">
         <Card className="w-full max-w-md">
           <CardHeader>
             <CardTitle>Password updated</CardTitle>
@@ -44,7 +44,7 @@ export default function UpdatePasswordPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-zinc-50 p-4">
+    <div className="min-h-screen flex items-center justify-center bg-sidebar p-4">
       <Card className="w-full max-w-md">
         <CardHeader>
           <CardTitle>Set new password</CardTitle>

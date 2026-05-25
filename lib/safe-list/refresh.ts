@@ -11,6 +11,7 @@ const MIN_LIQUIDITY_SCORE_MEDIUM = 75;
 const MIN_CONCENTRATION_SCORE = 50;
 const TARGET_LIST_SIZE = 10;
 const MAX_ANALYZE = 25;           // уменьшено с 50
+// const MAX_ANALYZE = 30;    
 const TIME_LIMIT_MS = 25000;      // 25 секунд
 
 function passesSafeCriteria(report: TokenRiskReport): boolean {

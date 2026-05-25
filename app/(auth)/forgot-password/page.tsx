@@ -20,8 +20,8 @@ export default function ForgotPasswordPage() {
 
   if (state.success) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-zinc-50 p-4">
-        <Card className="w-full max-w-md border-zinc-200/80 shadow-none">
+      <div className="">
+        <Card className="w-full max-w-md border-border/80 shadow-none">
           <CardHeader className="space-y-2 px-8 pt-8">
             <CardTitle className="text-2xl font-semibold tracking-tight">Check your email</CardTitle>
             <CardDescription className="text-zinc-500">
@@ -44,7 +44,7 @@ export default function ForgotPasswordPage() {
 
   return (
     <div className="">
-      <Card className="w-full max-w-md border-zinc-200/80 shadow-none">
+      <Card className="w-full max-w-md border-border/80 shadow-none">
         <CardHeader className="space-y-2 px-8 pt-8">
           <CardTitle className="text-2xl font-semibold tracking-tight">Reset password</CardTitle>
           <CardDescription className="text-zinc-500">
