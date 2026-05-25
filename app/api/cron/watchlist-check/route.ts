@@ -17,9 +17,9 @@ function verifyCronAuth(request: Request): boolean {
 }
 
 export async function POST(request: Request) {
-  // if (!verifyCronAuth(request)) {
-  //   return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  // }
+  if (!verifyCronAuth(request)) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
 
   const rows = await prisma.watchlistItem.findMany({
     select: {
@@ -99,6 +99,10 @@ export async function POST(request: Request) {
     },
     { status: 200 },
   );
+}
+
+export async function GET(request: Request) {
+  return POST(request);
 }
 
 

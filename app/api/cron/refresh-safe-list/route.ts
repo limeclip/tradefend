@@ -13,12 +13,15 @@ function verifyCronAuth(request: Request): boolean {
 }
 
 export async function POST(request: Request) {
-  // if (!verifyCronAuth(request)) {
-  //   return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  // }
+  if (!verifyCronAuth(request)) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
 
   const result = await refreshSafeList();
   return NextResponse.json({ ok: true, ...result });
 }
 
+export async function GET(request: Request) {
+  return POST(request);
+}
 
