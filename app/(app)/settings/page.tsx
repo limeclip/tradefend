@@ -44,7 +44,7 @@ export default async function SettingsPage() {
     <div className="space-y-8">
       <header className="space-y-3">
         <Badge variant="outline" className="rounded-full px-3 py-1 text-xs font-medium">
-          Settings
+          Settings Test Vercel
         </Badge>
         <h1 className="text-2xl font-semibold tracking-tight text-foreground md:text-2xl px-2">Account</h1>
         <p className="max-w-2xl text-muted-foreground px-2">Update your profile details and preferences.</p>
