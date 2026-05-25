@@ -6,12 +6,12 @@ import { normalizeTokenAddress } from '@/lib/watchlist/validation';
 import { fetchSafeListCandidates } from './candidates';
 import { buildReasonFull, buildReasonShort } from './reason';
 
-// Смягчённые критерии отбора
-const MIN_LIQUIDITY_SCORE_LOW = 50;      // для LOW риск достаточно ликвидности 50
-const MIN_LIQUIDITY_SCORE_MEDIUM = 75;   // для MEDIUM риск нужна высокая ликвидность 75
-const MIN_CONCENTRATION_SCORE = 50;      // концентрация >= 50 (вместо 60)
+const MIN_LIQUIDITY_SCORE_LOW = 50;
+const MIN_LIQUIDITY_SCORE_MEDIUM = 75;
+const MIN_CONCENTRATION_SCORE = 50;
 const TARGET_LIST_SIZE = 10;
-const MAX_ANALYZE = 50;                  // увеличил до 50, чтобы больше шансов
+const MAX_ANALYZE = 25;           // уменьшено с 50
+const TIME_LIMIT_MS = 25000;      // 25 секунд
 
 function passesSafeCriteria(report: TokenRiskReport): boolean {
   const { riskLevel, scores } = report;
@@ -34,6 +34,7 @@ export type RefreshSafeListResult = {
 };
 
 export async function refreshSafeList(): Promise<RefreshSafeListResult> {
+  const startTime = Date.now();
   const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
   const deleted = await prisma.curatedToken.deleteMany({
     where: { addedAt: { lt: cutoff } },
@@ -53,6 +54,8 @@ export async function refreshSafeList(): Promise<RefreshSafeListResult> {
   let analyzed = 0;
 
   for (const candidate of candidates) {
+    // Прерываем, если время вышло или набрали нужное количество
+    if (Date.now() - startTime > TIME_LIMIT_MS) break;
     if (selected.length >= TARGET_LIST_SIZE) break;
 
     analyzed += 1;
@@ -60,6 +63,7 @@ export async function refreshSafeList(): Promise<RefreshSafeListResult> {
     try {
       report = await analyzeToken(candidate.tokenAddress, candidate.chain, {
         skipCreditCheck: true,
+        forceRefresh: false, // используем кэш
       });
     } catch (err) {
       if (isTokenNotFoundError(err)) continue;
