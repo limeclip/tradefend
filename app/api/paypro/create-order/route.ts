@@ -63,7 +63,7 @@ export async function POST(request: Request) {
     params.set("return_url", `${appUrl}/payment-status?status=success`);
     params.set("cancel_url", `${appUrl}/pricing?status=cancelled`);
     // ✅ возвращаем paymentUrl – именно его ждёт pricing/page.tsx
-    return NextResponse.json({ paymentUrl: checkoutUrl.toString() }, { status: 200 });
+    return NextResponse.json({ checkoutUrl: checkoutUrl.toString() }, { status: 200 });
   } catch (error) {
     console.error(error);
     return NextResponse.json({ error: "Failed to create order" }, { status: 500 });
