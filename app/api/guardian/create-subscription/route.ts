@@ -1,22 +1,8 @@
 import { NextResponse } from "next/server";
 
 import { prisma } from "@/lib/prisma";
+import { SUBSCRIPTION_PLANS, parsePlanId } from "@/lib/nowpayments/subscriptions";
 import { createClient } from "@/lib/supabase/server";
-
-type PlanId = "monthly" | "yearly";
-
-type NowPaymentsPlanConfig = {
-  nowPlanId: number;
-};
-
-const PLAN_CONFIG: Record<PlanId, NowPaymentsPlanConfig> = {
-  monthly: { nowPlanId: 1535298971 },
-  yearly: { nowPlanId: 856620025 },
-};
-
-function parsePlanId(value: unknown): PlanId | null {
-  return value === "monthly" || value === "yearly" ? value : null;
-}
 
 export async function POST(request: Request) {
   try {
@@ -51,30 +37,30 @@ export async function POST(request: Request) {
     }
 
     const nowPaymentsApiKey = process.env.NOWPAYMENTS_API_KEY?.trim();
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL?.trim();
-
-    if (!nowPaymentsApiKey || !appUrl) {
+    if (!nowPaymentsApiKey) {
       console.error("Missing NOWPayments config", {
         hasApiKey: Boolean(nowPaymentsApiKey),
-        hasAppUrl: Boolean(appUrl),
       });
       return NextResponse.json({ error: "NOWPayments is not configured" }, { status: 500 });
     }
 
-    const nowPlanId = PLAN_CONFIG[planId].nowPlanId;
+    const configuredPlan = SUBSCRIPTION_PLANS[planId];
+    const nowPlanId = configuredPlan.envPlanId ?? configuredPlan.fallbackPlanId;
 
-    const response = await fetch("https://api.nowpayments.io/v1/subscription", {
+    if (!nowPlanId) {
+      return NextResponse.json({ error: "Subscription plan is not configured" }, { status: 500 });
+    }
+
+    const response = await fetch("https://api.nowpayments.io/v1/subscriptions", {
       method: "POST",
       headers: {
         "content-type": "application/json",
         "x-api-key": nowPaymentsApiKey,
       },
       body: JSON.stringify({
-        plan_id: nowPlanId,
-        customer_email: user.email,
-        customer_id: dbUser.id,
-        redirect_url: `${appUrl}/payment-status`,
-        webhook_url: `${appUrl}/api/webhooks/nowpayments`,
+        subscription_plan_id: nowPlanId,
+        email: user.email,
+        order_id: dbUser.id,
       }),
     });
 

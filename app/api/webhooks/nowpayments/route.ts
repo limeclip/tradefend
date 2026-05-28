@@ -1,16 +1,19 @@
 import { createHmac, timingSafeEqual } from "crypto";
 import { NextResponse } from "next/server";
 
+import { resolveSubscriptionPlan } from "@/lib/nowpayments/subscriptions";
 import { prisma } from "@/lib/prisma";
 
 type NowPaymentsWebhookPayload = {
   event_type?: unknown;
   event?: unknown;
-  customer_id?: unknown;
+  order_id?: unknown;
+  subscription_plan_id?: unknown;
   plan_id?: unknown;
   subscription_id?: unknown;
   next_payment_date?: unknown;
   expiration_date?: unknown;
+  status?: unknown;
 };
 
 function parsePayload(raw: string): NowPaymentsWebhookPayload | null {
@@ -21,12 +24,33 @@ function parsePayload(raw: string): NowPaymentsWebhookPayload | null {
   }
 }
 
+function sortObject(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map((item) => sortObject(item));
+  }
+  if (value && typeof value === "object") {
+    return Object.keys(value as Record<string, unknown>)
+      .sort()
+      .reduce<Record<string, unknown>>((acc, key) => {
+        acc[key] = sortObject((value as Record<string, unknown>)[key]);
+        return acc;
+      }, {});
+  }
+  return value;
+}
+
 function isValidSignature(rawBody: string, signatureHeader: string | null, secret: string): boolean {
   if (!signatureHeader) {
     return false;
   }
 
-  const expectedSignature = createHmac("sha256", secret).update(rawBody).digest("hex");
+  const parsed = parsePayload(rawBody);
+  if (!parsed) {
+    return false;
+  }
+
+  const sortedBody = JSON.stringify(sortObject(parsed));
+  const expectedSignature = createHmac("sha512", secret).update(sortedBody).digest("hex");
   const receivedSignature = signatureHeader.trim().toLowerCase();
 
   if (expectedSignature.length !== receivedSignature.length) {
@@ -57,10 +81,6 @@ function asNumber(value: unknown): number | null {
   }
 
   return null;
-}
-
-function resolvePlan(nowPlanId: number): "pro_monthly" | "pro_yearly" {
-  return nowPlanId === 1535298971 ? "pro_monthly" : "pro_yearly";
 }
 
 function parseExpirationDate(payload: NowPaymentsWebhookPayload): Date | null {
@@ -95,14 +115,23 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Invalid JSON payload" }, { status: 400 });
     }
 
-    const eventType = asString(payload.event_type) ?? asString(payload.event);
+    const eventType =
+      asString(payload.event_type) ?? asString(payload.event) ?? asString(payload.status)?.toLowerCase();
     if (!eventType) {
       return NextResponse.json({ error: "Missing event type" }, { status: 400 });
     }
 
-    if (eventType === "subscription_activated" || eventType === "subscription_paid") {
-      const customerId = asString(payload.customer_id);
-      const planId = asNumber(payload.plan_id);
+    if (eventType === "subscription_created") {
+      const customerId = asString(payload.order_id);
+      if (customerId) {
+        await prisma.user.updateMany({
+          where: { id: customerId },
+          data: { subscriptionStatus: "pending" },
+        });
+      }
+    } else if (eventType === "subscription_activated" || eventType === "subscription_paid") {
+      const customerId = asString(payload.order_id);
+      const planId = asNumber(payload.subscription_plan_id) ?? asNumber(payload.plan_id);
       const subscriptionId = asString(payload.subscription_id);
       const subscriptionExpiresAt = parseExpirationDate(payload);
 
@@ -113,7 +142,7 @@ export async function POST(request: Request) {
       await prisma.user.updateMany({
         where: { id: customerId },
         data: {
-          subscriptionPlan: resolvePlan(planId),
+          subscriptionPlan: resolveSubscriptionPlan(planId),
           subscriptionStatus: "active",
           subscriptionExpiresAt,
           payproSubscriptionId: subscriptionId,
@@ -122,7 +151,7 @@ export async function POST(request: Request) {
         },
       });
     } else if (eventType === "subscription_canceled" || eventType === "subscription_expired") {
-      const customerId = asString(payload.customer_id);
+      const customerId = asString(payload.order_id);
       if (customerId) {
         await prisma.user.updateMany({
           where: { id: customerId },
