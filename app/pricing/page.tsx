@@ -146,18 +146,18 @@ export default function PricingPage() {
 
     setLoadingPlan(planId);
     try {
-      const res = await fetch('/api/paypro/create-order', {
+      const res = await fetch('/api/guardian/create-subscription', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ planId }),
       });
-      const json = (await res.json().catch(() => null)) as { checkoutUrl?: string; error?: string } | null;
-      if (!res.ok || !json?.checkoutUrl) {
+      const json = (await res.json().catch(() => null)) as { paymentUrl?: string; error?: string } | null;
+      if (!res.ok || !json?.paymentUrl) {
         setError(json?.error ?? 'Could not start checkout.');
         return;
       }
 
-      window.location.href = json.checkoutUrl;
+      window.location.href = json.paymentUrl;
     } catch {
       setError('Network error. Please try again.');
     } finally {
