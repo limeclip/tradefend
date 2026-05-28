@@ -1,24 +1,41 @@
 import { NextResponse } from "next/server";
-
 import { prisma } from "@/lib/prisma";
 import { SUBSCRIPTION_PLANS, parsePlanId } from "@/lib/nowpayments/subscriptions";
 import { createClient } from "@/lib/supabase/server";
 
+type AuthResponse = { token?: string };
+
+async function getNowPaymentsToken(apiKey: string, email: string, password: string): Promise<string> {
+  const res = await fetch("https://api.nowpayments.io/v1/auth", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "x-api-key": apiKey },
+    body: JSON.stringify({ email, password }),
+  });
+  const payload = await res.json().catch(() => null);
+  if (!res.ok || !payload?.token) {
+    throw new Error(`NOWPayments auth failed (${res.status})`);
+  }
+  return payload.token;
+}
+
+function extractPaymentUrl(payload: any): string | null {
+  if (!payload) return null;
+  if (typeof payload.invoice_url === "string") return payload.invoice_url;
+  if (payload.data?.invoice_url) return payload.data.invoice_url;
+  if (Array.isArray(payload.result) && payload.result[0]?.invoice_url) return payload.result[0].invoice_url;
+  return null;
+}
+
 export async function POST(request: Request) {
   try {
     const supabase = await createClient();
-    const {
-      data: { user },
-      error: userError,
-    } = await supabase.auth.getUser();
-
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
     if (userError || !user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     const body = (await request.json().catch(() => null)) as { planId?: unknown } | null;
     const planId = parsePlanId(body?.planId);
-
     if (!planId) {
       return NextResponse.json({ error: "Invalid planId" }, { status: 400 });
     }
@@ -31,56 +48,51 @@ export async function POST(request: Request) {
       where: { supabaseUserId: user.id },
       select: { id: true },
     });
-
     if (!dbUser) {
-      return NextResponse.json({ error: "User profile not found" }, { status: 404 });
+      return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
-    const nowPaymentsApiKey = process.env.NOWPAYMENTS_API_KEY?.trim();
-    if (!nowPaymentsApiKey) {
-      console.error("Missing NOWPayments config", {
-        hasApiKey: Boolean(nowPaymentsApiKey),
-      });
-      return NextResponse.json({ error: "NOWPayments is not configured" }, { status: 500 });
+    const apiKey = process.env.NOWPAYMENTS_API_KEY?.trim();
+    const npEmail = process.env.NOWPAYMENTS_EMAIL?.trim();
+    const npPassword = process.env.NOWPAYMENTS_PASSWORD?.trim();
+    if (!apiKey || !npEmail || !npPassword) {
+      return NextResponse.json({ error: "NOWPayments env not configured" }, { status: 500 });
     }
 
-    const configuredPlan = SUBSCRIPTION_PLANS[planId];
-    const nowPlanId = configuredPlan.envPlanId ?? configuredPlan.fallbackPlanId;
-
+    const selectedPlan = SUBSCRIPTION_PLANS[planId];
+    const nowPlanId = selectedPlan.envPlanId ?? selectedPlan.fallbackPlanId;
     if (!nowPlanId) {
-      return NextResponse.json({ error: "Subscription plan is not configured" }, { status: 500 });
+      return NextResponse.json({ error: "NOWPayments plan id not configured" }, { status: 500 });
     }
 
+    const token = await getNowPaymentsToken(apiKey, npEmail, npPassword);
+
+    // Важно: отправляем и Authorization Bearer, и x-api-key
     const response = await fetch("https://api.nowpayments.io/v1/subscriptions", {
       method: "POST",
       headers: {
-        "content-type": "application/json",
-        "x-api-key": nowPaymentsApiKey,
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+        "x-api-key": apiKey,
       },
       body: JSON.stringify({
         subscription_plan_id: nowPlanId,
         email: user.email,
-        order_id: dbUser.id,
       }),
     });
 
     const payload = await response.json().catch(() => null);
-
-    // Пробуем извлечь paymentUrl из разных вариантов ответа
-    let paymentUrl: string | null = null;
-    if (payload) {
-      if (typeof payload.invoice_url === "string") paymentUrl = payload.invoice_url;
-      else if (typeof payload.invoiceUrl === "string") paymentUrl = payload.invoiceUrl;
-      else if (payload.data && typeof payload.data.invoice_url === "string") paymentUrl = payload.data.invoice_url;
-      else if (payload.data && typeof payload.data.invoiceUrl === "string") paymentUrl = payload.data.invoiceUrl;
-    }
+    const paymentUrl = extractPaymentUrl(payload);
 
     if (!response.ok || !paymentUrl) {
-      console.error("NOWPayments subscription creation failed", {
-        status: response.status,
-        payload,
-      });
-      return NextResponse.json({ error: "Could not create subscription" }, { status: 502 });
+      let userMessage = "Could not create subscription. Please try again later.";
+      if (payload?.message?.includes("already subscribed")) {
+        userMessage = "You already have a pending or active subscription for this plan. Please check your email for the payment link.";
+      } else if (payload?.message) {
+        userMessage = payload.message;
+      }
+      console.error("NOWPayments subscription creation failed", { status: response.status, payload });
+      return NextResponse.json({ error: userMessage }, { status: 502 });
     }
 
     return NextResponse.json({ paymentUrl }, { status: 200 });

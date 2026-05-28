@@ -8,9 +8,9 @@ type NowPaymentsWebhookPayload = {
   event_type?: unknown;
   event?: unknown;
   order_id?: unknown;
+  subscription_id?: unknown;
   subscription_plan_id?: unknown;
   plan_id?: unknown;
-  subscription_id?: unknown;
   next_payment_date?: unknown;
   expiration_date?: unknown;
   status?: unknown;
@@ -72,28 +72,27 @@ function asNumber(value: unknown): number | null {
   if (typeof value === "number" && Number.isFinite(value)) {
     return value;
   }
-
   if (typeof value === "string" && value.trim()) {
     const parsed = Number(value);
     if (Number.isFinite(parsed)) {
       return parsed;
     }
   }
-
   return null;
 }
 
 function parseExpirationDate(payload: NowPaymentsWebhookPayload): Date | null {
-  const dateValue =
-    (typeof payload.next_payment_date === "string" ? payload.next_payment_date : null) ??
-    (typeof payload.expiration_date === "string" ? payload.expiration_date : null);
-
-  if (!dateValue) {
+  const nextPaymentDate = asString(payload.next_payment_date);
+  const expirationDate = asString(payload.expiration_date);
+  const isoDate = nextPaymentDate ?? expirationDate;
+  if (!isoDate) {
     return null;
   }
-
-  const parsedDate = new Date(dateValue);
-  return Number.isNaN(parsedDate.getTime()) ? null : parsedDate;
+  const parsed = new Date(isoDate);
+  if (Number.isNaN(parsed.getTime())) {
+    return null;
+  }
+  return parsed;
 }
 
 export async function POST(request: Request) {
@@ -136,18 +135,21 @@ export async function POST(request: Request) {
       const subscriptionExpiresAt = parseExpirationDate(payload);
 
       if (!customerId || !planId || !subscriptionId || !subscriptionExpiresAt) {
-        return NextResponse.json({ error: "Missing required subscription fields" }, { status: 400 });
+        return NextResponse.json({ error: "Missing subscription fields" }, { status: 400 });
       }
+
+      const plan = resolveSubscriptionPlan(planId);
+      const now = new Date();
 
       await prisma.user.updateMany({
         where: { id: customerId },
         data: {
-          subscriptionPlan: resolveSubscriptionPlan(planId),
+          subscriptionPlan: plan,
           subscriptionStatus: "active",
           subscriptionExpiresAt,
           payproSubscriptionId: subscriptionId,
           checksUsedThisMonth: 0,
-          monthlyResetDate: new Date(),
+          monthlyResetDate: now,
         },
       });
     } else if (eventType === "subscription_canceled" || eventType === "subscription_expired") {

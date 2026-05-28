@@ -5,6 +5,8 @@ export type LocalPlanConfig = {
   intervalDay: number;
   amount: number;
   currency: "usd";
+  dbPlan: "pro_monthly" | "pro_yearly";
+  descriptionTag: "monthly" | "yearly";
   fallbackPlanId?: number;
   envPlanId?: number;
 };
@@ -22,6 +24,8 @@ export const SUBSCRIPTION_PLANS: Record<PlanId, LocalPlanConfig> = {
     intervalDay: 31,
     amount: 12.99,
     currency: "usd",
+    dbPlan: "pro_monthly",
+    descriptionTag: "monthly",
     fallbackPlanId: 1535298971,
     envPlanId: normalizePlanId(monthlyEnvPlanId),
   },
@@ -30,6 +34,8 @@ export const SUBSCRIPTION_PLANS: Record<PlanId, LocalPlanConfig> = {
     intervalDay: 365,
     amount: 99,
     currency: "usd",
+    dbPlan: "pro_yearly",
+    descriptionTag: "yearly",
     fallbackPlanId: 856620025,
     envPlanId: normalizePlanId(yearlyEnvPlanId),
   },
@@ -48,4 +54,18 @@ export function resolveSubscriptionPlan(nowPlanId: number): "pro_monthly" | "pro
     return "pro_monthly";
   }
   return "pro_yearly";
+}
+
+export function getPlanByDescription(orderDescription: string | null): PlanId | null {
+  if (!orderDescription) {
+    return null;
+  }
+  const normalized = orderDescription.trim().toLowerCase();
+  if (normalized.includes("plan:monthly")) {
+    return "monthly";
+  }
+  if (normalized.includes("plan:yearly")) {
+    return "yearly";
+  }
+  return null;
 }
