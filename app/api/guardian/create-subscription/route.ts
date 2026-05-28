@@ -3,8 +3,6 @@ import { prisma } from "@/lib/prisma";
 import { SUBSCRIPTION_PLANS, parsePlanId } from "@/lib/nowpayments/subscriptions";
 import { createClient } from "@/lib/supabase/server";
 
-type AuthResponse = { token?: string };
-
 async function getNowPaymentsToken(apiKey: string, email: string, password: string): Promise<string> {
   const res = await fetch("https://api.nowpayments.io/v1/auth", {
     method: "POST",
@@ -18,11 +16,14 @@ async function getNowPaymentsToken(apiKey: string, email: string, password: stri
   return payload.token;
 }
 
-function extractPaymentUrl(payload: any): string | null {
+function extractPaymentUrl(payload: unknown): string | null {
   if (!payload) return null;
-  if (typeof payload.invoice_url === "string") return payload.invoice_url;
-  if (payload.data?.invoice_url) return payload.data.invoice_url;
-  if (Array.isArray(payload.result) && payload.result[0]?.invoice_url) return payload.result[0].invoice_url;
+  const data = payload as Record<string, unknown>;
+  if (typeof data.invoice_url === "string") return data.invoice_url;
+  if (data.data && typeof (data.data as Record<string, unknown>).invoice_url === "string")
+    return (data.data as Record<string, unknown>).invoice_url as string;
+  if (Array.isArray(data.result) && data.result[0] && typeof (data.result[0] as Record<string, unknown>).invoice_url === "string")
+    return (data.result[0] as Record<string, unknown>).invoice_url as string;
   return null;
 }
 
@@ -67,7 +68,6 @@ export async function POST(request: Request) {
 
     const token = await getNowPaymentsToken(apiKey, npEmail, npPassword);
 
-    // Важно: отправляем и Authorization Bearer, и x-api-key
     const response = await fetch("https://api.nowpayments.io/v1/subscriptions", {
       method: "POST",
       headers: {
