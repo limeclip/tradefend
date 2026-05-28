@@ -18,10 +18,6 @@ function parsePlanId(value: unknown): PlanId | null {
   return value === "monthly" || value === "yearly" ? value : null;
 }
 
-type CreateSubscriptionResponse = {
-  invoice_url?: string;
-};
-
 export async function POST(request: Request) {
   try {
     const supabase = await createClient();
@@ -82,12 +78,18 @@ export async function POST(request: Request) {
       }),
     });
 
-    const payload = (await response.json().catch(() => null)) as
-      | CreateSubscriptionResponse
-      | { message?: string }
-      | null;
+    const payload = await response.json().catch(() => null);
 
-    if (!response.ok || !payload || typeof payload.invoice_url !== "string" || !payload.invoice_url.trim()) {
+    // Пробуем извлечь paymentUrl из разных вариантов ответа
+    let paymentUrl: string | null = null;
+    if (payload) {
+      if (typeof payload.invoice_url === "string") paymentUrl = payload.invoice_url;
+      else if (typeof payload.invoiceUrl === "string") paymentUrl = payload.invoiceUrl;
+      else if (payload.data && typeof payload.data.invoice_url === "string") paymentUrl = payload.data.invoice_url;
+      else if (payload.data && typeof payload.data.invoiceUrl === "string") paymentUrl = payload.data.invoiceUrl;
+    }
+
+    if (!response.ok || !paymentUrl) {
       console.error("NOWPayments subscription creation failed", {
         status: response.status,
         payload,
@@ -95,7 +97,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Could not create subscription" }, { status: 502 });
     }
 
-    return NextResponse.json({ paymentUrl: payload.invoice_url }, { status: 200 });
+    return NextResponse.json({ paymentUrl }, { status: 200 });
   } catch (error) {
     console.error("Create NOWPayments subscription error:", error);
     return NextResponse.json({ error: "Failed to create subscription" }, { status: 500 });
