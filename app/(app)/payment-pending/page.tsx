@@ -83,14 +83,14 @@ function PaymentPendingContent() {
 
           <div className="flex flex-col gap-3">
             <Button
-              className="h-12 w-full rounded-2xl"
+              className="h-12 w-full rounded-2xl cursor-pointer"
               onClick={() => void handlePaidClick()}
               disabled={checking}
             >
               {checking ? 'Checking…' : "I've paid"}
             </Button>
             <Link href="/dashboard" className="block">
-              <Button variant="outline" className="h-12 w-full rounded-2xl">
+              <Button variant="outline" className="h-12 w-full rounded-2xl cursor-pointer">
                 Back to dashboard
               </Button>
             </Link>

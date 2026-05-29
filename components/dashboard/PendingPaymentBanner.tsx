@@ -45,7 +45,7 @@ export function PendingPaymentBanner() {
   }, []);
 
   if (loading) {
-    return <Skeleton className="h-16 w-full rounded-2xl" />;
+    return <Skeleton className="h-16 w-full rounded-2xl max-w-5xl" />;
   }
 
   if (!pending?.hasPending || !pending.subscriptionId) {
