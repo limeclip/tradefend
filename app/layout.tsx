@@ -27,6 +27,26 @@ export const metadata: Metadata = {
     capable: true,
     title: "Tradefend",
   },
+  openGraph: {
+    title: "Tradefend - AI Crypto Risk Management",
+    description: "Protect your capital with real-time risk analysis, watchlist alerts, and AI position builder.",
+    url: "https://tradefend.xyz",
+    siteName: "Tradefend",
+    images: [
+      {
+        url: "https://tradefend.xyz/og-image.png",
+        width: 1200,
+        height: 630,
+      },
+    ],
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Tradefend - AI Crypto Risk Management",
+    description: "Protect your capital with real-time risk analysis, watchlist alerts, and AI position builder.",
+    images: ["https://tradefend.xyz/og-image.png"],
+  },
 };
 
 export default function RootLayout({
