@@ -41,6 +41,19 @@ export default function RootLayout({
         <meta name="theme-color" content="#000000" />
         <link rel="manifest" href="/manifest.json" />
         <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+         {/* Google Analytics */}
+         <Script
+          src="https://www.googletagmanager.com/gtag/js?id=G-KS4L0T0P13"
+          strategy="afterInteractive"
+        />
+        <Script id="google-analytics" strategy="afterInteractive">
+          {`
+            window.dataLayer = window.dataLayer || [];
+            function gtag(){dataLayer.push(arguments);}
+            gtag('js', new Date());
+            gtag('config', 'G-KS4L0T0P13');
+          `}
+        </Script>
       </head>
       <body className="min-h-full flex flex-col font-sans ">
         <TooltipProvider>
@@ -55,19 +68,7 @@ export default function RootLayout({
           </ThemeProvider>
         </TooltipProvider>
         <Toaster />
-        {/* Google Analytics */}
-        <Script
-          src="https://www.googletagmanager.com/gtag/js?id=G-KS4L0T0P13"
-          strategy="afterInteractive"
-        />
-        <Script id="google-analytics" strategy="afterInteractive">
-          {`
-            window.dataLayer = window.dataLayer || [];
-            function gtag(){dataLayer.push(arguments);}
-            gtag('js', new Date());
-            gtag('config', 'G-KS4L0T0P13');
-          `}
-        </Script>
+       
       </body>
     </html>
   );
