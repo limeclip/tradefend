@@ -39,6 +39,7 @@ export default function RootLayout({
       <head>
         {/* PWA: replace icons in public/icons/ — see docs/pwa-icons.md */}
         <meta name="theme-color" content="#000000" />
+        <meta name="google-site-verification" content="kwYLCxhrCccVMGUQ5jDNwRSznGDvqb6yC8Orl62e4No" />
         <link rel="manifest" href="/manifest.json" />
         <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
          {/* Google Analytics */}
