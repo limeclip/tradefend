@@ -1,36 +1,38 @@
 import { NextResponse } from "next/server";
+
+import { getNowPaymentsAuthToken } from "@/lib/nowpayments/auth";
+import { getNowPaymentsApiBase } from "@/lib/nowpayments/config";
+import {
+  getNowPaymentsPlanId,
+  parsePlanId,
+  SUBSCRIPTION_PLANS,
+} from "@/lib/nowpayments/subscriptions";
 import { prisma } from "@/lib/prisma";
-import { SUBSCRIPTION_PLANS, parsePlanId } from "@/lib/nowpayments/subscriptions";
 import { createClient } from "@/lib/supabase/server";
 
-async function getNowPaymentsToken(apiKey: string, email: string, password: string): Promise<string> {
-  const res = await fetch("https://api.nowpayments.io/v1/auth", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "x-api-key": apiKey },
-    body: JSON.stringify({ email, password }),
-  });
-  const payload = await res.json().catch(() => null);
-  if (!res.ok || !payload?.token) {
-    throw new Error(`NOWPayments auth failed (${res.status})`);
-  }
-  return payload.token;
-}
+type CreateSubscriptionResult = {
+  id?: number | string;
+};
 
-function extractPaymentUrl(payload: unknown): string | null {
-  if (!payload) return null;
-  const data = payload as Record<string, unknown>;
-  if (typeof data.invoice_url === "string") return data.invoice_url;
-  if (data.data && typeof (data.data as Record<string, unknown>).invoice_url === "string")
-    return (data.data as Record<string, unknown>).invoice_url as string;
-  if (Array.isArray(data.result) && data.result[0] && typeof (data.result[0] as Record<string, unknown>).invoice_url === "string")
-    return (data.result[0] as Record<string, unknown>).invoice_url as string;
-  return null;
+type CreateSubscriptionResponse = {
+  result?: CreateSubscriptionResult[];
+};
+
+function extractSubscriptionId(payload: CreateSubscriptionResponse | null): string | null {
+  const first = payload?.result?.[0];
+  if (first?.id === undefined || first.id === null) {
+    return null;
+  }
+  return String(first.id);
 }
 
 export async function POST(request: Request) {
   try {
     const supabase = await createClient();
-    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser();
     if (userError || !user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -54,48 +56,54 @@ export async function POST(request: Request) {
     }
 
     const apiKey = process.env.NOWPAYMENTS_API_KEY?.trim();
-    const npEmail = process.env.NOWPAYMENTS_EMAIL?.trim();
-    const npPassword = process.env.NOWPAYMENTS_PASSWORD?.trim();
-    if (!apiKey || !npEmail || !npPassword) {
+    if (!apiKey) {
       return NextResponse.json({ error: "NOWPayments env not configured" }, { status: 500 });
     }
 
-    const selectedPlan = SUBSCRIPTION_PLANS[planId];
-    const nowPlanId = selectedPlan.envPlanId ?? selectedPlan.fallbackPlanId;
-    if (!nowPlanId) {
-      return NextResponse.json({ error: "NOWPayments plan id not configured" }, { status: 500 });
+    const token = await getNowPaymentsAuthToken(apiKey);
+    if (!token) {
+      return NextResponse.json({ error: "NOWPayments authentication failed" }, { status: 500 });
     }
 
-    const token = await getNowPaymentsToken(apiKey, npEmail, npPassword);
+    const selectedPlan = SUBSCRIPTION_PLANS[planId];
+    const subscriptionPlanId = getNowPaymentsPlanId(planId);
 
-    const response = await fetch("https://api.nowpayments.io/v1/subscriptions", {
+    const createRes = await fetch(`${getNowPaymentsApiBase()}/subscriptions`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
         "x-api-key": apiKey,
+        Authorization: `Bearer ${token}`,
       },
       body: JSON.stringify({
-        subscription_plan_id: nowPlanId,
+        subscription_plan_id: subscriptionPlanId,
         email: user.email,
       }),
     });
 
-    const payload = await response.json().catch(() => null);
-    const paymentUrl = extractPaymentUrl(payload);
+    const createPayload = (await createRes.json().catch(() => null)) as CreateSubscriptionResponse | null;
+    const subscriptionId = extractSubscriptionId(createPayload);
 
-    if (!response.ok || !paymentUrl) {
-      let userMessage = "Could not create subscription. Please try again later.";
-      if (payload?.message?.includes("already subscribed")) {
-        userMessage = "You already have a pending or active subscription for this plan. Please check your email for the payment link.";
-      } else if (payload?.message) {
-        userMessage = payload.message;
-      }
-      console.error("NOWPayments subscription creation failed", { status: response.status, payload });
-      return NextResponse.json({ error: userMessage }, { status: 502 });
+    if (!createRes.ok || !subscriptionId) {
+      console.error("NOWPayments subscription creation failed", {
+        status: createRes.status,
+        payload: createPayload,
+      });
+      return NextResponse.json({ error: "Could not create subscription" }, { status: 502 });
     }
 
-    return NextResponse.json({ paymentUrl }, { status: 200 });
+    await prisma.payProOrder.create({
+      data: {
+        orderId: subscriptionId,
+        userId: dbUser.id,
+        planId,
+        amountUsd: selectedPlan.amount,
+        currency: "USD",
+        status: "pending",
+      },
+    });
+
+    return NextResponse.json({ requiresEmailCheck: true, subscriptionId }, { status: 200 });
   } catch (error) {
     console.error("Create NOWPayments subscription error:", error);
     return NextResponse.json({ error: "Failed to create subscription" }, { status: 500 });

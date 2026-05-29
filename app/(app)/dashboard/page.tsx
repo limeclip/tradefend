@@ -1,6 +1,7 @@
 import { Badge } from '@/components/ui/badge';
 import { DashboardAnalyzer } from '@/components/dashboard/DashboardAnalyzer';
 import { ActivityCalendar } from '@/components/dashboard/activity-calendar';
+import { PendingPaymentBanner } from '@/components/dashboard/PendingPaymentBanner';
 import { SafeListWidget } from '@/components/dashboard/SafeListWidget';
 import { createClient } from '@/lib/supabase/server';
 import { prisma } from '@/lib/prisma';
@@ -63,6 +64,7 @@ export default async function DashboardPage() {
 
   return (
     <div className="space-y-10">
+      <PendingPaymentBanner />
       <section className="space-y-4">
         <Badge variant="outline" className="rounded-full px-3 py-1 text-xs font-medium">
           Dashboard

@@ -1,19 +1,25 @@
 import { createHmac, timingSafeEqual } from "crypto";
 import { NextResponse } from "next/server";
 
-import { resolveSubscriptionPlan } from "@/lib/nowpayments/subscriptions";
+import {
+  parsePlanId,
+  resolvePlanIdFromNowPlanId,
+  SUBSCRIPTION_PLANS,
+  type PlanId,
+} from "@/lib/nowpayments/subscriptions";
 import { prisma } from "@/lib/prisma";
 
 type NowPaymentsWebhookPayload = {
   event_type?: unknown;
   event?: unknown;
+  payment_status?: unknown;
   order_id?: unknown;
-  subscription_id?: unknown;
-  subscription_plan_id?: unknown;
-  plan_id?: unknown;
-  next_payment_date?: unknown;
-  expiration_date?: unknown;
+  order_description?: unknown;
+  payment_id?: unknown;
   status?: unknown;
+  customer_email?: unknown;
+  subscription_plan_id?: unknown;
+  expire_date?: unknown;
 };
 
 function parsePayload(raw: string): NowPaymentsWebhookPayload | null {
@@ -74,97 +80,144 @@ function asNumber(value: unknown): number | null {
   }
   if (typeof value === "string" && value.trim()) {
     const parsed = Number(value);
-    if (Number.isFinite(parsed)) {
-      return parsed;
-    }
+    return Number.isFinite(parsed) ? parsed : null;
   }
   return null;
 }
 
-function parseExpirationDate(payload: NowPaymentsWebhookPayload): Date | null {
-  const nextPaymentDate = asString(payload.next_payment_date);
-  const expirationDate = asString(payload.expiration_date);
-  const isoDate = nextPaymentDate ?? expirationDate;
-  if (!isoDate) {
+function addDays(baseDate: Date, days: number): Date {
+  const result = new Date(baseDate);
+  result.setUTCDate(result.getUTCDate() + days);
+  return result;
+}
+
+function parseExpireDate(value: unknown): Date | null {
+  const raw = asString(value);
+  if (!raw) {
     return null;
   }
-  const parsed = new Date(isoDate);
-  if (Number.isNaN(parsed.getTime())) {
-    return null;
+  const parsed = new Date(raw);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+async function activateSubscription(params: {
+  subscriptionId: string | null;
+  customerEmail: string | null;
+  nowPlanId: number | null;
+  paymentId: string | null;
+  expireDate: Date | null;
+}): Promise<void> {
+  const { subscriptionId, customerEmail, nowPlanId, paymentId, expireDate } = params;
+
+  let userId: string | null = null;
+  let localPlanId: PlanId | null = null;
+
+  if (subscriptionId) {
+    const order = await prisma.payProOrder.findUnique({
+      where: { orderId: subscriptionId },
+      select: { userId: true, planId: true },
+    });
+    if (order) {
+      userId = order.userId;
+      localPlanId = parsePlanId(order.planId);
+    }
   }
-  return parsed;
+
+  if (!userId && customerEmail) {
+    const user = await prisma.user.findUnique({
+      where: { email: customerEmail },
+      select: { id: true },
+    });
+    userId = user?.id ?? null;
+  }
+
+  if (!userId) {
+    console.error("NOWPayments webhook: user not found", { subscriptionId, customerEmail });
+    return;
+  }
+
+  if (!localPlanId && nowPlanId !== null) {
+    localPlanId = resolvePlanIdFromNowPlanId(nowPlanId);
+  }
+
+  if (!localPlanId) {
+    console.error("NOWPayments webhook: plan not resolved", { nowPlanId, subscriptionId });
+    return;
+  }
+
+  const planConfig = SUBSCRIPTION_PLANS[localPlanId];
+  const now = new Date();
+  const subscriptionExpiresAt = expireDate ?? addDays(now, planConfig.intervalDay);
+
+  await prisma.user.update({
+    where: { id: userId },
+    data: {
+      subscriptionPlan: planConfig.dbPlan,
+      subscriptionStatus: "active",
+      subscriptionExpiresAt,
+      payproSubscriptionId: paymentId ?? subscriptionId ?? undefined,
+      checksUsedThisMonth: 0,
+      monthlyResetDate: now,
+    },
+  });
+
+  if (subscriptionId) {
+    await prisma.payProOrder.updateMany({
+      where: { orderId: subscriptionId },
+      data: { status: "paid" },
+    });
+  }
 }
 
 export async function POST(request: Request) {
   try {
+    
     const ipnSecret = process.env.NOWPAYMENTS_IPN_SECRET?.trim();
     if (!ipnSecret) {
-      return NextResponse.json({ error: "NOWPayments IPN secret not configured" }, { status: 500 });
+      console.error("NOWPayments IPN secret not configured");
+      return NextResponse.json({ ok: true }, { status: 200 });
     }
 
     const rawBody = await request.text();
     const signature = request.headers.get("x-nowpayments-sig");
 
     if (!isValidSignature(rawBody, signature, ipnSecret)) {
-      return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
+      console.error("NOWPayments webhook: invalid signature");
+      return NextResponse.json({ ok: true }, { status: 200 });
     }
 
     const payload = parsePayload(rawBody);
     if (!payload) {
-      return NextResponse.json({ error: "Invalid JSON payload" }, { status: 400 });
+      console.error("NOWPayments webhook: invalid JSON payload");
+      return NextResponse.json({ ok: true }, { status: 200 });
     }
 
     const eventType =
       asString(payload.event_type) ?? asString(payload.event) ?? asString(payload.status)?.toLowerCase();
-    if (!eventType) {
-      return NextResponse.json({ error: "Missing event type" }, { status: 400 });
-    }
 
-    if (eventType === "subscription_created") {
-      const customerId = asString(payload.order_id);
-      if (customerId) {
-        await prisma.user.updateMany({
-          where: { id: customerId },
-          data: { subscriptionStatus: "pending" },
-        });
-      }
-    } else if (eventType === "subscription_activated" || eventType === "subscription_paid") {
-      const customerId = asString(payload.order_id);
-      const planId = asNumber(payload.subscription_plan_id) ?? asNumber(payload.plan_id);
-      const subscriptionId = asString(payload.subscription_id);
-      const subscriptionExpiresAt = parseExpirationDate(payload);
+    const isActivation =
+      eventType === "subscription_activated" ||
+      eventType === "invoice_paid" ||
+      eventType === "payment_finished";
 
-      if (!customerId || !planId || !subscriptionId || !subscriptionExpiresAt) {
-        return NextResponse.json({ error: "Missing subscription fields" }, { status: 400 });
-      }
+    if (isActivation) {
+      const subscriptionId = asString(payload.order_id);
+      const customerEmail = asString(payload.customer_email);
+      const nowPlanId = asNumber(payload.subscription_plan_id);
+      const paymentId = asString(payload.payment_id);
+      const expireDate = parseExpireDate(payload.expire_date);
 
-      const plan = resolveSubscriptionPlan(planId);
-      const now = new Date();
-
-      await prisma.user.updateMany({
-        where: { id: customerId },
-        data: {
-          subscriptionPlan: plan,
-          subscriptionStatus: "active",
-          subscriptionExpiresAt,
-          payproSubscriptionId: subscriptionId,
-          checksUsedThisMonth: 0,
-          monthlyResetDate: now,
-        },
+      await activateSubscription({
+        subscriptionId,
+        customerEmail,
+        nowPlanId,
+        paymentId,
+        expireDate,
       });
-    } else if (eventType === "subscription_canceled" || eventType === "subscription_expired") {
-      const customerId = asString(payload.order_id);
-      if (customerId) {
-        await prisma.user.updateMany({
-          where: { id: customerId },
-          data: { subscriptionStatus: "inactive" },
-        });
-      }
     }
-
-    return NextResponse.json({ ok: true }, { status: 200 });
   } catch (error) {
     console.error("NOWPayments webhook error:", error);
-    return NextResponse.json({ error: "Webhook processing failed" }, { status: 500 });
   }
+
+  return NextResponse.json({ ok: true }, { status: 200 });
 }

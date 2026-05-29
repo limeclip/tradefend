@@ -151,13 +151,23 @@ export default function PricingPage() {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ planId }),
       });
-      const json = (await res.json().catch(() => null)) as { paymentUrl?: string; error?: string } | null;
-      if (!res.ok || !json?.paymentUrl) {
+      const json = (await res.json().catch(() => null)) as {
+        requiresEmailCheck?: boolean;
+        subscriptionId?: string;
+        error?: string;
+      } | null;
+
+      if (!res.ok) {
         setError(json?.error ?? 'Could not start checkout.');
         return;
       }
 
-      window.location.href = json.paymentUrl;
+      if (json?.requiresEmailCheck && json.subscriptionId) {
+        router.push(`/payment-pending?subscriptionId=${encodeURIComponent(json.subscriptionId)}`);
+        return;
+      }
+
+      setError('Could not start checkout.');
     } catch {
       setError('Network error. Please try again.');
     } finally {
@@ -245,7 +255,7 @@ export default function PricingPage() {
                     {isCurrent
                       ? 'Current plan'
                       : isProCard && loadingPlan === plan.id
-                        ? 'Redirecting…'
+                        ? 'Starting…'
                         : plan.cta}
                   </Button>
                 </CardContent>

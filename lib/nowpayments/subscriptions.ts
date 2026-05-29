@@ -56,6 +56,22 @@ export function resolveSubscriptionPlan(nowPlanId: number): "pro_monthly" | "pro
   return "pro_yearly";
 }
 
+export function getNowPaymentsPlanId(localPlanId: PlanId): number {
+  const plan = SUBSCRIPTION_PLANS[localPlanId];
+  return plan.envPlanId ?? plan.fallbackPlanId!;
+}
+
+export function resolvePlanIdFromNowPlanId(nowPlanId: number): PlanId {
+  const monthly = SUBSCRIPTION_PLANS.monthly;
+  if (
+    nowPlanId === monthly.fallbackPlanId ||
+    (typeof monthly.envPlanId === "number" && nowPlanId === monthly.envPlanId)
+  ) {
+    return "monthly";
+  }
+  return "yearly";
+}
+
 export function getPlanByDescription(orderDescription: string | null): PlanId | null {
   if (!orderDescription) {
     return null;

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { getNowPaymentsApiBase } from "@/lib/nowpayments/config";
 import { SUBSCRIPTION_PLANS } from "@/lib/nowpayments/subscriptions";
 import { createClient } from "@/lib/supabase/server";
 
@@ -42,7 +43,7 @@ export async function POST() {
     for (const [localPlan, config] of Object.entries(SUBSCRIPTION_PLANS) as Array<
       [keyof typeof SUBSCRIPTION_PLANS, (typeof SUBSCRIPTION_PLANS)[keyof typeof SUBSCRIPTION_PLANS]]
     >) {
-      const response = await fetch("https://api.nowpayments.io/v1/subscriptions/plans", {
+      const response = await fetch(`${getNowPaymentsApiBase()}/subscriptions/plans`, {
         method: "POST",
         headers: {
           "content-type": "application/json",
