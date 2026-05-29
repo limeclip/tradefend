@@ -53,7 +53,7 @@ export function PendingPaymentBanner() {
   }
 
   return (
-    <Alert className="border-amber-500/30 bg-amber-500/5">
+    <Alert className="border-amber-500/30 bg-amber-500/5 max-w-5xl">
       <AlertTitle>Unpaid subscription</AlertTitle>
       <AlertDescription className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <span>You have an unpaid subscription. Complete payment to activate Pro.</span>
