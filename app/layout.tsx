@@ -7,7 +7,7 @@ import { ThemeColorSync } from "@/components/ThemeColorSync";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "@/components/ui/sonner";
 import Script from "next/script";
-
+import { Analytics } from "@vercel/analytics/next"
 
 
 const inter = Inter({
@@ -69,7 +69,7 @@ export default function RootLayout({
           </ThemeProvider>
         </TooltipProvider>
         <Toaster />
-       
+        <Analytics/>
       </body>
     </html>
   );
