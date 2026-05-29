@@ -17,6 +17,7 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || 'https://www.tradefend.xyz'),
   title: "Tradefend - Pre-Trade Risk Checker",
   description: "Fast and minimal pre-trade risk checks for crypto assets.",
   manifest: "/manifest.json",

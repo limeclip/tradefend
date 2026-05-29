@@ -1,5 +1,4 @@
 import { ImageResponse } from 'next/og';
-
 import {
   getPublicTokenPageData,
   PublicTokenNotFoundError,
@@ -7,6 +6,7 @@ import {
 
 export const size = { width: 1200, height: 630 };
 export const contentType = 'image/png';
+export const runtime = 'edge'; // Добавляем для производительности на Vercel
 
 type Props = {
   params: Promise<{ address: string }>;
@@ -28,12 +28,13 @@ export default async function OgImage({ params }: Props) {
   try {
     const { report } = await getPublicTokenPageData(address);
     ticker = report.ticker ?? report.name ?? 'Token';
-    riskLevel = report.riskLevel;
-    overall = String(report.scores.overall);
+    riskLevel = report.riskLevel ?? '—';
+    overall = String(report.scores?.overall ?? '—');
   } catch (err) {
     if (!(err instanceof PublicTokenNotFoundError)) {
-      throw err;
+      console.error(err);
     }
+    // Если произошла другая ошибка, всё равно продолжаем с дефолтными значениями
   }
 
   const accent = riskColor(riskLevel);
@@ -53,13 +54,34 @@ export default async function OgImage({ params }: Props) {
           fontFamily: 'system-ui, sans-serif',
         }}
       >
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+        {/* Верхняя часть: логотип и название токена */}
+        <div
+          style={{
+            display: 'flex', // <--- ДОБАВЛЯЕМ ОБЯЗАТЕЛЬНЫЙ DISPLAY: FLEX
+            flexDirection: 'column',
+            gap: 16,
+          }}
+        >
           <div style={{ fontSize: 28, fontWeight: 600, letterSpacing: '-0.02em' }}>Tradefend</div>
           <div style={{ fontSize: 64, fontWeight: 700, letterSpacing: '-0.04em' }}>{ticker}</div>
           <div style={{ fontSize: 28, color: '#525252' }}>Risk report</div>
         </div>
-        <div style={{ display: 'flex', alignItems: 'flex-end', gap: 48 }}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+
+        {/* Нижняя часть: скоре и лейбл риска */}
+        <div
+          style={{
+            display: 'flex', // <--- ДОБАВЛЯЕМ DISPLAY: FLEX
+            alignItems: 'flex-end',
+            gap: 48,
+          }}
+        >
+          <div
+            style={{
+              display: 'flex', // <--- ДОБАВЛЯЕМ DISPLAY: FLEX
+              flexDirection: 'column',
+              gap: 8,
+            }}
+          >
             <div style={{ fontSize: 22, color: '#737373' }}>Overall score</div>
             <div style={{ fontSize: 96, fontWeight: 700, color: accent, lineHeight: 1 }}>
               {overall}
@@ -73,6 +95,7 @@ export default async function OgImage({ params }: Props) {
               padding: '16px 32px',
               borderRadius: 999,
               border: `3px solid ${accent}`,
+              display: 'flex', // <--- ДОБАВЛЯЕМ DISPLAY: FLEX
             }}
           >
             {riskLevel} risk
